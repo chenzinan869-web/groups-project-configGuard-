@@ -1,0 +1,26 @@
+# ================================
+# ConfigGuard - Docker Compose
+# Misconfiguration Scanner for Docker & Cloud Environments
+# ================================
+
+version: "3.10"
+
+services:
+  configguard:
+    # Build the image from the local Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Name the container
+    container_name: configguard-scanner
+
+    # Mount the current directory so the scanner can read local files
+    volumes:
+      - .:/scan
+
+    # Default command — can be overridden when running
+    command: ["--file", "/scan/docker-compose.yml"]
+
+    # Do not restart automatically — run once and stop
+    restart: "no"
