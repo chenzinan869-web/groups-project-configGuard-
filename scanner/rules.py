@@ -1,3 +1,4 @@
+# T-06: Detection rule - Privileged mode enabled
 def check_privileged_mode(services):
     findings = []
 
