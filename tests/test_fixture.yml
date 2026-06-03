@@ -1,1 +1,8 @@
+version: "3.8"
 
+services:
+  web:
+    image: nginx:latest
+    privileged: true        # ← dit moet gedetecteerd worden
+    ports:
+      - "80:80"
