@@ -1,5 +1,4 @@
 import argparse
-from scanner.output import print_findings, print_summary    
 from scanner.parser import parse_compose_file
 from scanner.rules import (
     check_privileged_mode,
@@ -8,9 +7,8 @@ from scanner.rules import (
     check_resource_limits,
     check_hardcoded_secrets
 )
-
 from scanner.output import print_findings, print_summary
-from scanner.exporter import export_json, export_html 
+from scanner.exporter import export_json, export_html
 
 def main():
     parser = argparse.ArgumentParser(
