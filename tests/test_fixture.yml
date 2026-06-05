@@ -3,6 +3,10 @@ version: "3.8"
 services:
   web:
     image: nginx:latest
-    privileged: true        # ← dit moet gedetecteerd worden
+    privileged: true
     ports:
-      - "80:80"
+      - "22:22"
+      - "3306:3306"
+    environment:
+      - DB_PASSWORD=secret123
+      - API_KEY=myapikey456"
