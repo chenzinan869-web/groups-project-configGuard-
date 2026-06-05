@@ -2,11 +2,26 @@ version: "3.8"
 
 services:
   web:
-    image: nginx:latest
-    privileged: true
+    image: nginx:latest          # Rule 3: mutable tag
+    privileged: true             # Rule 1: privileged mode
     ports:
-      - "22:22"
-      - "3306:3306"
+      - "80:80"
+      - "3306:3306"              # Rule 2: sensitive port exposed on all interfaces
     environment:
-      - DB_PASSWORD=secret123
-      - API_KEY=myapikey456"
+      DB_PASSWORD: supersecret123  # Rule 5: hardcoded secret
+      APP_ENV: production
+
+  database:
+    image: postgres              # Rule 3: no tag at all
+    ports:
+      - "5432:5432"              # Rule 2: sensitive port exposed on all interfaces
+    environment:
+      POSTGRES_PASSWORD: mysecretpassword  # Rule 5: hardcoded secret
+      POSTGRES_DB: appdb
+    # No deploy.resources.limits block → Rule 4: missing resource limits
+
+  cache:
+    image: redis:stable          # Rule 3: mutable tag
+    ports:
+      - "6379:6379"              # Rule 2: sensitive port exposed on all interfaces
+    # No deploy.resources.limits block → Rule 4: missing resource limits
