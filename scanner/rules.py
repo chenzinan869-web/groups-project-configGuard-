@@ -147,3 +147,89 @@ def check_hardcoded_secrets(services):
             })
 
     return findings
+
+
+# T-16: Detection rule - Sensitive volume mounts
+SENSITIVE_HOST_PATHS = {
+    "/",
+    "/etc",
+    "/root",
+    "/proc",
+    "/sys",
+    "/boot",
+    "/dev",
+    "/run",
+    "/usr",
+    "/bin",
+    "/sbin",
+}
+
+DOCKER_SOCKET = "/var/run/docker.sock"
+
+
+def _parse_volume(volume_entry):
+    """Parse a volume entry into (source, target, read_only).
+
+    Handles both short string syntax (host:container[:mode])
+    and long-form dict syntax {type, source, target, read_only}.
+    """
+    if isinstance(volume_entry, dict):
+        source    = volume_entry.get("source", "")
+        target    = volume_entry.get("target", "")
+        read_only = volume_entry.get("read_only", False)
+        return source, target, read_only
+
+    parts     = str(volume_entry).split(":")
+    source    = parts[0] if len(parts) >= 1 else ""
+    target    = parts[1] if len(parts) >= 2 else ""
+    mode      = parts[2] if len(parts) >= 3 else "rw"
+    read_only = mode.lower() == "ro"
+    return source, target, read_only
+
+
+def check_sensitive_volumes(services):
+    """Check for dangerous volume mounts: Docker socket and sensitive host paths."""
+    findings = []
+
+    for service_name, service_config in services.items():
+        volumes = service_config.get("volumes") or []
+
+        for vol in volumes:
+            source, _target, read_only = _parse_volume(vol)
+
+            if not source:
+                continue
+
+            # Docker socket mount gives full daemon control
+            if source == DOCKER_SOCKET:
+                findings.append({
+                    "rule":        "Docker socket mounted",
+                    "service":     service_name,
+                    "severity":    "HIGH",
+                    "description": f"Service '{service_name}' mounts the Docker socket ({DOCKER_SOCKET}). "
+                                   "This grants the container full control over the Docker daemon, "
+                                   "effectively giving it root access on the host.",
+                    "fix":         "Remove the Docker socket mount. If you need Docker-in-Docker, "
+                                   "consider using a rootless Docker setup or a dedicated sidecar.",
+                })
+                continue
+
+            # Sensitive absolute host path
+            if source.startswith("/"):
+                for path in SENSITIVE_HOST_PATHS:
+                    if source == path or source.startswith(path + "/"):
+                        mode_label = "read-only" if read_only else "read-write"
+                        severity   = "MEDIUM" if read_only else "HIGH"
+                        findings.append({
+                            "rule":        "Sensitive host path mounted",
+                            "service":     service_name,
+                            "severity":    severity,
+                            "description": f"Service '{service_name}' mounts the sensitive host path "
+                                           f"'{source}' ({mode_label}). This may expose or allow "
+                                           "modification of critical system files.",
+                            "fix":         "Mount only the specific subdirectory your application needs, "
+                                           "and add ':ro' to make the mount read-only where possible.",
+                        })
+                        break
+
+    return findings

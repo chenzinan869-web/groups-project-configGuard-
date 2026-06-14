@@ -5,6 +5,8 @@ services:
     image: nginx:1.25.3
     ports:
       - "8080:80"                # Non-sensitive port, no interface restriction needed
+    volumes:
+      - ./app:/usr/share/nginx/html:ro  # Safe: app-specific relative path, read-only
     environment:
       APP_ENV: production
       APP_PORT: "8080"
