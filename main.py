@@ -1,5 +1,6 @@
 import argparse
 from scanner.parser import parse_compose_file
+from scanner.env_scanner import scan_env_file
 from scanner.rules import (
     check_privileged_mode,
     check_exposed_ports,
@@ -16,6 +17,7 @@ def main():
         epilog="Example: python main.py --file docker-compose.yml --export json"
     )
     parser.add_argument("--file", required=True, help="Path to docker-compose.yml")
+    parser.add_argument("--env",  default=None,  help="Path to a .env file to scan for secrets")
     parser.add_argument("--export", choices=["json", "html"], help="Export results to a file")
     args = parser.parse_args()
 
@@ -30,6 +32,11 @@ def main():
     findings += check_latest_image_tag(services)
     findings += check_resource_limits(services)
     findings += check_hardcoded_secrets(services)
+
+    # Optionally scan a .env file
+    if args.env:
+        print(f"Scanning .env file: {args.env}\n")
+        findings += scan_env_file(args.env)
 
     # Show results via rich output
     print_findings(findings)
