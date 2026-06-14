@@ -5,7 +5,8 @@ from scanner.rules import (
     check_exposed_ports,
     check_latest_image_tag,
     check_resource_limits,
-    check_hardcoded_secrets
+    check_hardcoded_secrets,
+    check_sensitive_volumes,
 )
 from scanner.output import print_findings, print_summary
 from scanner.exporter import export_json, export_html
@@ -30,6 +31,7 @@ def main():
     findings += check_latest_image_tag(services)
     findings += check_resource_limits(services)
     findings += check_hardcoded_secrets(services)
+    findings += check_sensitive_volumes(services)
 
     # Show results via rich output
     print_findings(findings)
