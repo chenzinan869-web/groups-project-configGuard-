@@ -1,6 +1,6 @@
 """
 T-18 | tests/test_rules.py
-Unit tests for all five Sprint 1 ConfigGuard rules.
+Unit tests for all five Sprint 1 and two Sprint 2 ConfigGuard rules.
 
 Run with:
     pytest tests/test_rules.py -v
@@ -13,7 +13,11 @@ from scanner.rules import (
     check_latest_image_tag,
     check_resource_limits,
     check_hardcoded_secrets,
+    check_sensitive_volumes,
 )
+from scanner.env_scanner import scan_env_file
+import tempfile
+import os
 
 
 # ---------------------------------------------------------------------------
@@ -242,3 +246,111 @@ class TestHardcodedSecrets:
         }))
         result = check_hardcoded_secrets(svcs)
         assert len(result) == 1
+
+
+# ===========================================================================
+# Rule 6 — Sensitive volume mounts (Sprint 2 / T-16)
+# ===========================================================================
+
+class TestSensitiveVolumes:
+
+    def test_no_volumes_clean(self):
+        result = check_sensitive_volumes({"web": {"image": "nginx:1.25"}})
+        assert result == []
+
+    def test_docker_socket_flagged(self):
+        svcs = {"app": {"image": "myapp:1.0", "volumes": ["/var/run/docker.sock:/var/run/docker.sock"]}}
+        result = check_sensitive_volumes(svcs)
+        assert len(result) == 1
+        assert result[0]["severity"] == "HIGH"
+        assert result[0]["service"] == "app"
+
+    def test_sensitive_host_path_readwrite_flagged_high(self):
+        svcs = {"web": {"image": "nginx:1.25", "volumes": ["/etc:/host-etc"]}}
+        result = check_sensitive_volumes(svcs)
+        assert len(result) == 1
+        assert result[0]["severity"] == "HIGH"
+
+    def test_sensitive_host_path_readonly_flagged_medium(self):
+        svcs = {"web": {"image": "nginx:1.25", "volumes": ["/etc:/host-etc:ro"]}}
+        result = check_sensitive_volumes(svcs)
+        assert len(result) == 1
+        assert result[0]["severity"] == "MEDIUM"
+
+    def test_safe_relative_volume_clean(self):
+        svcs = {"web": {"image": "nginx:1.25", "volumes": ["./app:/usr/share/nginx/html:ro"]}}
+        result = check_sensitive_volumes(svcs)
+        assert result == []
+
+    def test_named_volume_clean(self):
+        svcs = {"db": {"image": "postgres:15", "volumes": ["pgdata:/var/lib/postgresql/data"]}}
+        result = check_sensitive_volumes(svcs)
+        assert result == []
+
+
+# ===========================================================================
+# Rule 7 — .env file scanner (Sprint 2 / T-17)
+# ===========================================================================
+
+import tempfile
+import os
+
+def write_env(content):
+    """Write content to a temp .env file and return its path."""
+    f = tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False)
+    f.write(content)
+    f.close()
+    return f.name
+
+
+class TestEnvScanner:
+
+    def test_variable_reference_clean(self):
+        path = write_env("DB_PASSWORD=${DB_PASSWORD}\n")
+        try:
+            assert scan_env_file(path) == []
+        finally:
+            os.unlink(path)
+
+    def test_placeholder_secret_flagged_high(self):
+        path = write_env("DB_PASSWORD=changeme\n")
+        try:
+            result = scan_env_file(path)
+            assert len(result) == 1
+            assert result[0]["severity"] == "HIGH"
+        finally:
+            os.unlink(path)
+
+    def test_empty_secret_flagged_medium(self):
+        path = write_env("API_KEY=\n")
+        try:
+            result = scan_env_file(path)
+            assert len(result) == 1
+            assert result[0]["severity"] == "MEDIUM"
+        finally:
+            os.unlink(path)
+
+    def test_hardcoded_literal_flagged_medium(self):
+        path = write_env("API_KEY=sk-abc123reallongkey456\n")
+        try:
+            result = scan_env_file(path)
+            assert len(result) == 1
+            assert result[0]["severity"] == "MEDIUM"
+        finally:
+            os.unlink(path)
+
+    def test_debug_mode_enabled_flagged(self):
+        path = write_env("DEBUG=true\n")
+        try:
+            result = scan_env_file(path)
+            assert len(result) == 1
+            assert result[0]["severity"] == "MEDIUM"
+        finally:
+            os.unlink(path)
+
+    def test_non_secret_key_clean(self):
+        path = write_env("APP_ENV=production\nPORT=8080\n")
+        try:
+            assert scan_env_file(path) == []
+        finally:
+            os.unlink(path)
